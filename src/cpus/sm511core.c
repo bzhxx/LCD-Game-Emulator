@@ -101,7 +101,6 @@ void sm511_device_reset()
 
 	m_melody_rd &= ~1;
 	m_clk_div = 4; // 8kHz
-	sm511_init_melody(melody_rom);
 }
 
 /********** 1 second timer *********/

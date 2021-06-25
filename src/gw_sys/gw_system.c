@@ -89,16 +89,17 @@ bool gw_system_config()
 		device_reset = sm511_device_reset;
 		device_run = sm511_execute_run;
 		device_blit = gw_gfx_sm510_rendering;
-		return true;
+		return (sm511_init_melody(gw_melody));
 	}
 
+	// SM512
 	if (strncmp(gw_head.cpu_name, ROM_CPU_SM512, 5) == 0)
 	{
 		device_start = sm510_device_start;
 		device_reset = sm511_device_reset;
 		device_run = sm511_execute_run;
 		device_blit = gw_gfx_sm510_rendering;
-		return true;
+		return (sm511_init_melody(gw_melody));
 	}
 
 	return false;
