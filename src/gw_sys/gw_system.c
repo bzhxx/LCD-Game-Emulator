@@ -36,9 +36,9 @@ static void (*device_start)();
 static void (*device_run)();
 static void (*device_blit)(unsigned short *active_framebuffer);
 
-unsigned int keys_pressed;
-unsigned char last_io_K;
-unsigned char last_io_S;
+//unsigned int keys_pressed;
+static unsigned char last_joystick;
+//unsigned char last_io_S[8];
 
 /* map functions and custom configuration */
 bool gw_system_config()
@@ -105,8 +105,14 @@ bool gw_system_config()
 	return false;
 }
 
-void gw_system_reset() { device_reset(); }
-void gw_system_start() { device_start(); }
+void gw_system_reset() {
+	 last_joystick=0;
+	 device_reset();
+	  }
+void gw_system_start() {
+	 last_joystick=0;
+	 device_start();
+	 }
 void gw_system_blit(unsigned short *active_framebuffer) { device_blit(active_framebuffer); }
 bool gw_system_romload() { return gw_romloader(); }
 
@@ -214,7 +220,7 @@ void gw_writeR(unsigned char data) { gw_system_sound_melody(data); };
 unsigned char gw_readB()
 {
 
-	keys_pressed = gw_get_buttons() & 0xff;
+	unsigned int keys_pressed = gw_get_buttons() & 0xff;
 
 	if (keys_pressed == 0)
 		return 1;
@@ -229,7 +235,7 @@ unsigned char gw_readB()
 unsigned char gw_readBA()
 {
 
-	keys_pressed = gw_get_buttons() & 0xff;
+	unsigned int keys_pressed = gw_get_buttons() & 0xff;
 
 	if (keys_pressed == 0)
 		return 1;
@@ -246,18 +252,13 @@ unsigned char gw_readK(unsigned char io_S)
 
 	unsigned char io_K = 0;
 
-	//  unsigned int keys_pressed = gw_get_buttons() & 0xff;
-
-	keys_pressed = gw_get_buttons() & 0xff;
+   unsigned int keys_pressed = gw_get_buttons() & 0xff;
 
 	if (keys_pressed == 0)
 		return 0;
 
-	last_io_S = io_S;
-
 	for (int Sx = 0; Sx < 8; Sx++)
 	{
-
 		if (((io_S >> Sx) & 0x1) != 0)
 		{
 
@@ -273,7 +274,19 @@ unsigned char gw_readK(unsigned char io_S)
 				if (((gw_keyboard[Sx] & 0xff000000) == (keys_pressed << 24)))
 					io_K |= 0x8;
 
-				//single key mode
+				if (keys_pressed & GW_BUTTON_LEFT)
+					io_K = last_joystick & (0xFF-GW_BUTTON_RIGHT) | GW_BUTTON_LEFT;
+
+				if (keys_pressed & GW_BUTTON_RIGHT)
+					io_K = last_joystick & (0xFF-GW_BUTTON_LEFT) | GW_BUTTON_RIGHT;
+
+				if (keys_pressed & GW_BUTTON_DOWN)
+					io_K = last_joystick & (0xFF-GW_BUTTON_UP) | GW_BUTTON_DOWN;
+
+				if (keys_pressed & GW_BUTTON_UP)
+					io_K = last_joystick & (0xFF-GW_BUTTON_DOWN) | GW_BUTTON_UP;
+
+			//single key mode
 			}
 			else
 			{
@@ -301,7 +314,6 @@ unsigned char gw_readK(unsigned char io_S)
 		if (((gw_keyboard[1] & 0xff000000) & (keys_pressed << 24)) != 0)
 			io_K |= 0x8;
 	}
-	last_io_K = io_K;
 
 	return io_K & 0xf;
 }
