@@ -36,9 +36,7 @@ static void (*device_start)();
 static void (*device_run)();
 static void (*device_blit)(unsigned short *active_framebuffer);
 
-//unsigned int keys_pressed;
 static unsigned char last_joystick;
-//unsigned char last_io_S[8];
 
 /* map functions and custom configuration */
 bool gw_system_config()
@@ -105,14 +103,8 @@ bool gw_system_config()
 	return false;
 }
 
-void gw_system_reset() {
-	 last_joystick=0;
-	 device_reset();
-	  }
-void gw_system_start() {
-	 last_joystick=0;
-	 device_start();
-	 }
+void gw_system_reset() { device_reset(); }
+void gw_system_start() { device_start(); }
 void gw_system_blit(unsigned short *active_framebuffer) { device_blit(active_framebuffer); }
 bool gw_system_romload() { return gw_romloader(); }
 
@@ -252,7 +244,7 @@ unsigned char gw_readK(unsigned char io_S)
 
 	unsigned char io_K = 0;
 
-   unsigned int keys_pressed = gw_get_buttons() & 0xff;
+	unsigned int keys_pressed = gw_get_buttons() & 0xff;
 
 	if (keys_pressed == 0)
 		return 0;
@@ -262,9 +254,32 @@ unsigned char gw_readK(unsigned char io_S)
 		if (((io_S >> Sx) & 0x1) != 0)
 		{
 
-			//multi-key mode
+
 			if (gw_keyboard_multikey[Sx])
 			{
+				//joystick case
+				unsigned int joystick_dir = (gw_keyboard[Sx] & 0x000000ff) |
+											((gw_keyboard[Sx] >> 8) & 0x000000ff) |
+											((gw_keyboard[Sx] >> 16) & 0x000000ff) |
+											((gw_keyboard[Sx] >> 24) & 0x000000ff);
+
+				if (joystick_dir ==  (GW_BUTTON_UP | GW_BUTTON_DOWN | GW_BUTTON_RIGHT | GW_BUTTON_LEFT))
+				{
+					if (keys_pressed == GW_BUTTON_LEFT )
+						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
+
+					if (keys_pressed == GW_BUTTON_RIGHT)
+						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
+
+					if (keys_pressed == GW_BUTTON_DOWN)
+						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_UP)) | GW_BUTTON_DOWN;
+
+					if (keys_pressed == GW_BUTTON_UP)
+						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_DOWN)) | GW_BUTTON_UP;
+
+					last_joystick= keys_pressed;
+				}
+
 				if (((gw_keyboard[Sx] & 0x000000ff) == (keys_pressed)))
 					io_K |= 0x1;
 				if (((gw_keyboard[Sx] & 0x0000ff00) == (keys_pressed << 8)))
@@ -274,21 +289,8 @@ unsigned char gw_readK(unsigned char io_S)
 				if (((gw_keyboard[Sx] & 0xff000000) == (keys_pressed << 24)))
 					io_K |= 0x8;
 
-				if (keys_pressed & GW_BUTTON_LEFT)
-					io_K = last_joystick & (0xFF-GW_BUTTON_RIGHT) | GW_BUTTON_LEFT;
-
-				if (keys_pressed & GW_BUTTON_RIGHT)
-					io_K = last_joystick & (0xFF-GW_BUTTON_LEFT) | GW_BUTTON_RIGHT;
-
-				if (keys_pressed & GW_BUTTON_DOWN)
-					io_K = last_joystick & (0xFF-GW_BUTTON_UP) | GW_BUTTON_DOWN;
-
-				if (keys_pressed & GW_BUTTON_UP)
-					io_K = last_joystick & (0xFF-GW_BUTTON_DOWN) | GW_BUTTON_UP;
-
 			//single key mode
-			}
-			else
+			} else
 			{
 				if (((gw_keyboard[Sx] & 0x000000ff) & (keys_pressed)) != 0)
 					io_K |= 0x1;

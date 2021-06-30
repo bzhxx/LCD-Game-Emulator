@@ -74,12 +74,12 @@ unsigned char gw_readBA();
 unsigned char gw_readB();
 
 #define GW_BUTTON_LEFT  1
-#define GW_BUTTON_UP    1 << 1
-#define GW_BUTTON_RIGHT 1 << 2
-#define GW_BUTTON_DOWN  1 << 3
-#define GW_BUTTON_A     1 << 4
-#define GW_BUTTON_B     1 << 5
-#define GW_BUTTON_TIME  1 << 6
-#define GW_BUTTON_GAME  1 << 7
+#define GW_BUTTON_UP    (1 << 1)
+#define GW_BUTTON_RIGHT (1 << 2)
+#define GW_BUTTON_DOWN  (1 << 3)
+#define GW_BUTTON_A     (1 << 4)
+#define GW_BUTTON_B     (1 << 5)
+#define GW_BUTTON_TIME  (1 << 6)
+#define GW_BUTTON_GAME  (1 << 7)
 
 #endif /* _GW_SYSTEM_H_ */
