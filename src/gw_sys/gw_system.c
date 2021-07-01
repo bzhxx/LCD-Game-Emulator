@@ -254,51 +254,51 @@ unsigned char gw_readK(unsigned char io_S)
 		if (((io_S >> Sx) & 0x1) != 0)
 		{
 
-
 			if (gw_keyboard_multikey[Sx])
 			{
 				//joystick case
-				unsigned int joystick_dir = (gw_keyboard[Sx] & 0x000000ff) |
-											((gw_keyboard[Sx] >> 8) & 0x000000ff) |
-											((gw_keyboard[Sx] >> 16) & 0x000000ff) |
-											((gw_keyboard[Sx] >> 24) & 0x000000ff);
+				unsigned int joystick_dir = (gw_keyboard[Sx] & 0xff) |
+											((gw_keyboard[Sx] >> 8) & 0xff) |
+											((gw_keyboard[Sx] >> 16) & 0xff) |
+											((gw_keyboard[Sx] >> 24) & 0xff);
 
-				if (joystick_dir ==  (GW_BUTTON_UP | GW_BUTTON_DOWN | GW_BUTTON_RIGHT | GW_BUTTON_LEFT))
+				if (joystick_dir == (GW_BUTTON_UP | GW_BUTTON_DOWN | GW_BUTTON_RIGHT | GW_BUTTON_LEFT))
 				{
-					if (keys_pressed == GW_BUTTON_LEFT )
-						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
+					if (keys_pressed == GW_BUTTON_LEFT)
+						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
 
 					if (keys_pressed == GW_BUTTON_RIGHT)
-						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
+						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
 
 					if (keys_pressed == GW_BUTTON_DOWN)
-						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_UP)) | GW_BUTTON_DOWN;
+						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_UP)) | GW_BUTTON_DOWN;
 
 					if (keys_pressed == GW_BUTTON_UP)
-						keys_pressed = (last_joystick & (0xFF-GW_BUTTON_DOWN)) | GW_BUTTON_UP;
+						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_DOWN)) | GW_BUTTON_UP;
 
-					last_joystick= keys_pressed;
+					last_joystick = keys_pressed;
 				}
 
-				if (((gw_keyboard[Sx] & 0x000000ff) == (keys_pressed)))
+				if (((gw_keyboard[Sx] & GW_MASK_K1) == (keys_pressed)))
 					io_K |= 0x1;
-				if (((gw_keyboard[Sx] & 0x0000ff00) == (keys_pressed << 8)))
+				if (((gw_keyboard[Sx] & GW_MASK_K2) == (keys_pressed << 8)))
 					io_K |= 0x2;
-				if (((gw_keyboard[Sx] & 0x00ff0000) == (keys_pressed << 16)))
+				if (((gw_keyboard[Sx] & GW_MASK_K3) == (keys_pressed << 16)))
 					io_K |= 0x4;
-				if (((gw_keyboard[Sx] & 0xff000000) == (keys_pressed << 24)))
+				if (((gw_keyboard[Sx] & GW_MASK_K4) == (keys_pressed << 24)))
 					io_K |= 0x8;
 
-			//single key mode
-			} else
+				//single key mode
+			}
+			else
 			{
-				if (((gw_keyboard[Sx] & 0x000000ff) & (keys_pressed)) != 0)
+				if (((gw_keyboard[Sx] & GW_MASK_K1) & (keys_pressed)) != 0)
 					io_K |= 0x1;
-				if (((gw_keyboard[Sx] & 0x0000ff00) & (keys_pressed << 8)) != 0)
+				if (((gw_keyboard[Sx] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
 					io_K |= 0x2;
-				if (((gw_keyboard[Sx] & 0x00ff0000) & (keys_pressed << 16)) != 0)
+				if (((gw_keyboard[Sx] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
 					io_K |= 0x4;
-				if (((gw_keyboard[Sx] & 0xff000000) & (keys_pressed << 24)) != 0)
+				if (((gw_keyboard[Sx] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
 					io_K |= 0x8;
 			}
 		}
@@ -307,13 +307,13 @@ unsigned char gw_readK(unsigned char io_S)
 	//case of R/S output is not used to poll buttons (used R2 or S2 configuration)
 	if (io_S == 0)
 	{
-		if (((gw_keyboard[1] & 0x000000ff) & (keys_pressed)) != 0)
+		if (((gw_keyboard[1] & GW_MASK_K1) & (keys_pressed)) != 0)
 			io_K |= 0x1;
-		if (((gw_keyboard[1] & 0x0000ff00) & (keys_pressed << 8)) != 0)
+		if (((gw_keyboard[1] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
 			io_K |= 0x2;
-		if (((gw_keyboard[1] & 0x00ff0000) & (keys_pressed << 16)) != 0)
+		if (((gw_keyboard[1] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
 			io_K |= 0x4;
-		if (((gw_keyboard[1] & 0xff000000) & (keys_pressed << 24)) != 0)
+		if (((gw_keyboard[1] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
 			io_K |= 0x8;
 	}
 
@@ -346,4 +346,167 @@ void gw_system_shutdown(void)
 {
 	/* change audio frequency to default audio clock */
 	//gw_set_audio_frequency(48000);
+}
+
+static gw_state_t save_state;
+
+/* save state */
+bool gw_state_save(unsigned char *dest_ptr)
+{
+	/* add header and signature */
+	memcpy(&save_state.magic_word, GW_MAGIC_WORD, 8);
+	memcpy(&save_state.rom_signature, &gw_head.rom_signature, 8);
+
+	/* dump all variables from sm510base.c */
+
+	// internal RAM 128x4 bits
+	memcpy(&save_state.gw_ram, &gw_ram, sizeof(gw_ram));
+	memcpy(&save_state.gw_ram_state, &gw_ram_state, sizeof(gw_ram_state));
+
+	//program counter, opcode,...
+	save_state.m_pc = m_pc;
+	save_state.m_prev_pc = m_prev_pc;
+	save_state.m_op = m_op;
+	save_state.m_prev_op = m_prev_op;
+
+	save_state.m_param = m_param;
+	save_state.m_stack_levels = m_stack_levels;
+	memcpy(save_state.m_stack, &m_stack, sizeof(m_stack));
+	save_state.m_icount = m_icount;
+
+	save_state.m_acc = m_acc;
+	save_state.m_bl = m_bl;
+	save_state.m_bm = m_bm;
+	save_state.m_c = m_c;
+	save_state.m_w = m_w;
+	save_state.m_s_out = m_s_out;
+	save_state.m_r = m_r;
+	save_state.m_r_out = m_r_out;
+
+	save_state.bool_m_k_active = (un8)m_k_active;
+	save_state.bool_m_halt = (un8)m_halt;
+	save_state.bool_m_sbm = (un8)m_sbm;
+	save_state.bool_m_sbl = (un8)m_sbl;
+	save_state.bool_m_skip = (un8)m_skip;
+
+	// freerun time counter
+	save_state.m_div = m_div;
+	save_state.bool_m_1s = (un8)m_1s;
+	save_state.m_clk_div = m_clk_div;
+
+	// melody controller
+	save_state.m_r_mask_option = m_r_mask_option;
+	save_state.m_melody_rd = m_melody_rd;
+	save_state.m_melody_step_count = m_melody_step_count;
+	save_state.m_melody_duty_count = m_melody_duty_count;
+	save_state.m_melody_duty_index = m_melody_duty_index;
+	save_state.m_melody_address = m_melody_address;
+
+	// lcd driver
+	save_state.m_l = m_l;
+	save_state.m_x = m_x;
+	save_state.m_y = m_y;
+	save_state.m_bp = m_bp;
+	save_state.bool_m_bc = (un8)m_bc;
+
+	// SM500 internals
+	save_state.m_o_pins = m_o_pins;
+	memcpy(&save_state.m_ox, &m_ox, sizeof(m_ox));
+	memcpy(&save_state.m_o, &m_o, sizeof(m_o));
+	memcpy(&save_state.m_ox_state, &m_ox_state, sizeof(m_ox_state));
+	memcpy(&save_state.m_o_state, &m_o_state, sizeof(m_o_state));
+
+	save_state.m_cn = m_cn;
+	save_state.m_mx = m_mx;
+
+	save_state.m_cb = m_cb;
+	save_state.m_s = m_s;
+	save_state.bool_m_rsub = (un8)m_rsub;
+
+	/* save state */
+	memcpy(dest_ptr, &save_state, sizeof(save_state));
+	return true;
+}
+
+/* load state */
+bool gw_state_load(unsigned char *src_ptr)
+{
+
+	memcpy(&save_state, src_ptr, sizeof(save_state));
+
+	/* Check header and signature */
+	if (memcmp(&save_state.magic_word, GW_MAGIC_WORD, 8) != 0)
+		return false;
+	if (memcmp(&save_state.rom_signature, &gw_head.rom_signature, 8) != 0)
+		return false; // 16
+
+	/* set all variables from sm510base.c */
+
+	// internal RAM 128x4 bits
+	memcpy(&gw_ram, &save_state.gw_ram, sizeof(gw_ram));
+	memcpy(&gw_ram_state, &save_state.gw_ram_state, sizeof(gw_ram_state));
+
+	//program counter, opcode
+	m_pc = save_state.m_pc;
+	m_prev_pc = save_state.m_prev_pc;
+	m_op = save_state.m_op;
+	m_prev_op = save_state.m_prev_op;
+
+	m_param = save_state.m_param;
+	m_stack_levels = save_state.m_stack_levels;
+	memcpy(m_stack, &save_state.m_stack, sizeof(m_stack));
+	m_icount = save_state.m_icount;
+
+	m_acc = save_state.m_acc;
+	m_bl = save_state.m_bl;
+	m_bm = save_state.m_bm;
+	m_c = save_state.m_c;
+	m_w = save_state.m_w;
+	m_s_out = save_state.m_s_out;
+	m_r = save_state.m_r;
+	m_r_out = save_state.m_r_out;
+
+	m_k_active = (bool)save_state.bool_m_k_active;
+	m_halt = (bool)save_state.bool_m_halt;
+	m_sbm = (bool)save_state.bool_m_sbm;
+	m_sbl = (bool)save_state.bool_m_sbl;
+	m_skip = (bool)save_state.bool_m_skip;
+
+	// melody controller
+	m_r_mask_option = save_state.m_r_mask_option;
+	m_melody_rd = save_state.m_melody_rd;
+	m_melody_step_count = save_state.m_melody_step_count;
+	m_melody_duty_count = save_state.m_melody_duty_count;
+	m_melody_duty_index = save_state.m_melody_duty_index;
+	m_melody_address = save_state.m_melody_address;
+
+	// freerun time counter
+	m_clk_div = save_state.m_clk_div;
+	m_div = save_state.m_div;
+	m_1s = (bool)save_state.bool_m_1s;
+	m_melody_duty_index = save_state.m_melody_duty_index;
+	m_melody_address = save_state.m_melody_address;
+
+	// lcd driver
+	m_l = save_state.m_l;
+	m_x = save_state.m_x;
+	m_y = save_state.m_y;
+	m_bp = save_state.m_bp;
+	m_bc = (bool)save_state.bool_m_bc;
+
+	// SM500 internals
+	m_o_pins = save_state.m_o_pins;
+	memcpy(&m_ox, &save_state.m_ox, sizeof(m_ox));
+	memcpy(&m_o, &save_state.m_o, sizeof(m_o));
+	memcpy(&m_ox_state, &save_state.m_ox_state, sizeof(m_ox_state));
+	memcpy(&m_o_state, &save_state.m_o_state, sizeof(m_o_state));
+
+	m_cn = save_state.m_cn;
+	m_mx = save_state.m_mx;
+
+	m_cb = save_state.m_cb;
+	m_s = save_state.m_s;
+	m_rsub = (bool)save_state.bool_m_rsub;
+
+	return true;
 }
