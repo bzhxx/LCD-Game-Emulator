@@ -75,7 +75,6 @@ extern unsigned int   *gw_segments_offset;
 extern unsigned char  *gw_program;
 extern unsigned char  *gw_melody;
 extern unsigned int   *gw_keyboard;
-extern bool            gw_keyboard_multikey[];
 
 /* ROM header */
 typedef struct gwromheader_s

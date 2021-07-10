@@ -37,6 +37,7 @@ static void (*device_run)();
 static void (*device_blit)(unsigned short *active_framebuffer);
 
 static unsigned char last_joystick;
+static bool gw_keyboard_multikey[8];
 
 /* map functions and custom configuration */
 bool gw_system_config()
@@ -47,6 +48,80 @@ bool gw_system_config()
 
 	/* init graphics parameters */
 	gw_gfx_init();
+
+	/* parse keyboard mapping to detect DPAD multi-key mode */
+	// determine if there is a multi-key configuration (number of keys > 4)
+	// for some game joypad is used with combination
+	//  LEFT_UP, LEFT_DOWN, RIGHT_UP and RIGH_DOWN
+	// in this case, 2 bits are returned by the HAL as a dual key pressed
+	// here, we try to detect this configuration.
+
+	// Parse all keys configuration
+	// S1..S8
+	// set a flag if it's single key mode or mulyi-key mode
+
+	for (int i = 0; i < 8; i++)
+	{
+
+		/* By default it's not multikey */
+		gw_keyboard_multikey[i] = false;
+
+		un32 score = 0;
+
+		/* 4 combination to find */
+		un8 K1 = gw_keyboard[i] & 0xFF;
+		un8 K2 = (gw_keyboard[i] >> 8) & 0xFF;
+		un8 K3 = (gw_keyboard[i] >> 16) & 0xFF;
+		un8 K4 = (gw_keyboard[i] >> 24) & 0xFF;
+
+		un8 C1 = GW_BUTTON_LEFT + GW_BUTTON_UP;
+		un8 C2 = GW_BUTTON_LEFT + GW_BUTTON_DOWN;
+		un8 C3 = GW_BUTTON_RIGHT + GW_BUTTON_UP;
+		un8 C4 = GW_BUTTON_RIGHT + GW_BUTTON_DOWN;
+
+		if (K1 == C1)
+			score++;
+		else if (K2 == C1)
+			score++;
+		else if (K3 == C1)
+			score++;
+		else if (K4 == C1)
+			score++;
+
+		if (K1 == C2)
+			score++;
+		else if (K2 == C2)
+			score++;
+		else if (K3 == C2)
+			score++;
+		else if (K4 == C2)
+			score++;
+
+		if (K1 == C3)
+			score++;
+		else if (K2 == C3)
+			score++;
+		else if (K3 == C3)
+			score++;
+		else if (K4 == C3)
+			score++;
+
+		if (K1 == C4)
+			score++;
+		else if (K2 == C4)
+			score++;
+		else if (K3 == C4)
+			score++;
+		else if (K4 == C4)
+			score++;
+
+		/* 4 combinations are found ? */
+		if (score == 4)
+			gw_keyboard_multikey[i] = true;
+	}
+
+	/* init joystick to default position */
+	last_joystick = 0;
 
 	/* depending on the CPU, set functions pointers */
 
@@ -217,7 +292,7 @@ unsigned char gw_readB()
 	if (keys_pressed == 0)
 		return 1;
 
-	if (gw_keyboard[9] == keys_pressed)
+	if (gw_keyboard[9] & keys_pressed)
 		return 0;
 
 	return 1;
@@ -232,7 +307,7 @@ unsigned char gw_readBA()
 	if (keys_pressed == 0)
 		return 1;
 
-	if (gw_keyboard[8] == keys_pressed)
+	if (gw_keyboard[8] & keys_pressed)
 		return 0;
 
 	return 1;
@@ -253,45 +328,56 @@ unsigned char gw_readK(unsigned char io_S)
 	{
 		if (((io_S >> Sx) & 0x1) != 0)
 		{
-
+			// DPAD multi-key with relative change
 			if (gw_keyboard_multikey[Sx])
 			{
-				//joystick case
-				unsigned int joystick_dir = (gw_keyboard[Sx] & 0xff) |
-											((gw_keyboard[Sx] >> 8) & 0xff) |
-											((gw_keyboard[Sx] >> 16) & 0xff) |
-											((gw_keyboard[Sx] >> 24) & 0xff);
+				// keep only relevant DPAD keys
+				keys_pressed = keys_pressed & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
 
-				if (joystick_dir == (GW_BUTTON_UP | GW_BUTTON_DOWN | GW_BUTTON_RIGHT | GW_BUTTON_LEFT))
+				// manage when a single key is pressed but the emulated game expects
+				// reuse the previous DPAD value (last_joystick) and add a complementary key
+				if (keys_pressed == GW_BUTTON_LEFT)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
+
+				if (keys_pressed == GW_BUTTON_RIGHT)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
+
+				if (keys_pressed == GW_BUTTON_DOWN)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_UP)) | GW_BUTTON_DOWN;
+
+				if (keys_pressed == GW_BUTTON_UP)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_DOWN)) | GW_BUTTON_UP;
+
+				if ((gw_keyboard[Sx] & GW_MASK_K1) == keys_pressed)
 				{
-					if (keys_pressed == GW_BUTTON_LEFT)
-						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
-
-					if (keys_pressed == GW_BUTTON_RIGHT)
-						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
-
-					if (keys_pressed == GW_BUTTON_DOWN)
-						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_UP)) | GW_BUTTON_DOWN;
-
-					if (keys_pressed == GW_BUTTON_UP)
-						keys_pressed = (last_joystick & (0xFF - GW_BUTTON_DOWN)) | GW_BUTTON_UP;
-
+					io_K |= 0x1;
 					last_joystick = keys_pressed;
 				}
 
-				if (((gw_keyboard[Sx] & GW_MASK_K1) == (keys_pressed)))
-					io_K |= 0x1;
-				if (((gw_keyboard[Sx] & GW_MASK_K2) == (keys_pressed << 8)))
+				// perform  key checking (exclusively, all keys shall match)
+				if ((gw_keyboard[Sx] & GW_MASK_K2) == (keys_pressed << 8))
+				{
 					io_K |= 0x2;
-				if (((gw_keyboard[Sx] & GW_MASK_K3) == (keys_pressed << 16)))
-					io_K |= 0x4;
-				if (((gw_keyboard[Sx] & GW_MASK_K4) == (keys_pressed << 24)))
-					io_K |= 0x8;
+					last_joystick = keys_pressed;
+				}
 
-				//single key mode
+				if ((gw_keyboard[Sx] & GW_MASK_K3) == (keys_pressed << 16))
+				{
+					io_K |= 0x4;
+					last_joystick = keys_pressed;
+				}
+
+				if ((gw_keyboard[Sx] & GW_MASK_K4) == (keys_pressed << 24))
+				{
+					io_K |= 0x8;
+					last_joystick = keys_pressed;
+				}
+
+				// (Non DPAD case) perform key checking (at least one key shall match)
 			}
 			else
 			{
+
 				if (((gw_keyboard[Sx] & GW_MASK_K1) & (keys_pressed)) != 0)
 					io_K |= 0x1;
 				if (((gw_keyboard[Sx] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
@@ -302,19 +388,61 @@ unsigned char gw_readK(unsigned char io_S)
 					io_K |= 0x8;
 			}
 		}
-	}
 
-	//case of R/S output is not used to poll buttons (used R2 or S2 configuration)
-	if (io_S == 0)
-	{
-		if (((gw_keyboard[1] & GW_MASK_K1) & (keys_pressed)) != 0)
-			io_K |= 0x1;
-		if (((gw_keyboard[1] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
-			io_K |= 0x2;
-		if (((gw_keyboard[1] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
-			io_K |= 0x4;
-		if (((gw_keyboard[1] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
-			io_K |= 0x8;
+		//case of R/S output is not used to poll buttons (used R2 or S2 configuration)
+		// same algorithm as previously
+		if (io_S == 0)
+		{
+			if (gw_keyboard_multikey[1])
+			{
+
+				keys_pressed = keys_pressed & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
+
+				if (keys_pressed == GW_BUTTON_LEFT)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
+
+				if (keys_pressed == GW_BUTTON_RIGHT)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
+
+				if (keys_pressed == GW_BUTTON_DOWN)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_UP)) | GW_BUTTON_DOWN;
+
+				if (keys_pressed == GW_BUTTON_UP)
+					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_DOWN)) | GW_BUTTON_UP;
+
+				if ((gw_keyboard[1] & GW_MASK_K1) == keys_pressed)
+				{
+					io_K |= 0x1;
+					last_joystick = keys_pressed;
+				}
+				if ((gw_keyboard[1] & GW_MASK_K2) == (keys_pressed << 8))
+				{
+					io_K |= 0x2;
+					last_joystick = keys_pressed;
+				}
+				if ((gw_keyboard[1] & GW_MASK_K3) == (keys_pressed << 16))
+				{
+					io_K |= 0x4;
+					last_joystick = keys_pressed;
+				}
+				if ((gw_keyboard[1] & GW_MASK_K4) == (keys_pressed << 24))
+				{
+					io_K |= 0x8;
+					last_joystick = keys_pressed;
+				}
+			}
+			else
+			{
+				if (((gw_keyboard[1] & GW_MASK_K1) & (keys_pressed)) != 0)
+					io_K |= 0x1;
+				if (((gw_keyboard[1] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
+					io_K |= 0x2;
+				if (((gw_keyboard[1] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
+					io_K |= 0x4;
+				if (((gw_keyboard[1] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
+					io_K |= 0x8;
+			}
+		}
 	}
 
 	return io_K & 0xf;

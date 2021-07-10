@@ -54,7 +54,6 @@ unsigned int   *gw_segments_offset=NULL;
 unsigned char  *gw_program=NULL;
 unsigned char  *gw_melody=NULL;
 unsigned int   *gw_keyboard=NULL;
-bool gw_keyboard_multikey[10];
 
 gwromheader_t gw_head;
 
@@ -174,7 +173,7 @@ bool gw_romloader_rom2ram()
    if ( gw_head.background_pixel_size != 0)
       gw_background    = (unsigned short*) &GW_ROM[gw_head.background_pixel];
    
-   // otherwise we set the background at the end (assuming futur  JPEG decoder)
+   // otherwise we set the background at the end (assuming futur JPEG decoder)
    else
       gw_background    = (unsigned short*) &GW_ROM[rom_size_src];
 
@@ -200,34 +199,6 @@ bool gw_romloader_rom2ram()
 
    gw_keyboard         = (unsigned int*)   &GW_ROM[gw_head.keyboard];
 
-   // determine if there is a multi-key configuration (number of keys > 4)
-   // for some game  joypad is used with combination
-   //  LEFT_UP, LEFT_DOWN, RIGHT_UP and RIGH_DOWN
-   // in this case, 2 bits are returned by the HAL as a dual key pressed
-   // here, we try to detect this configuration.
-   // it's later use  by the read_k operation call by the emulated CPU.
-   // Bit Twiddling Hacks 
-   // http://realtimecollisiondetection.net/blog/?p=78
-
-   // Parse all keys configuration
-   // K1..K8,B,BA
-   // set a flag if it's single key mode or mulyi-key mode
-   
-   for (int i=0; i < 10  ;i++) {
-
-      un32 v = gw_keyboard[i];
-		un32 c;
-   	v = v - ((v >> 1) & 0x55555555);                    // reuse input as temporary
-		v = (v & 0x33333333) + ((v >> 2) & 0x33333333);     // temp
-		c = (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24; // count
-
-		//single key or multikey mode ?
-      // used when a Joystick 2 directions combination is set
-      // if  more than 4 keys are used
-      // TODO can be improved by checking each bytes K1..K4
-      gw_keyboard_multikey[i]=false;
-		if (c > 4) gw_keyboard_multikey[i]=true;
-   }
    return true;
 }
 
