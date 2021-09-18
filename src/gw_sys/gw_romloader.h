@@ -23,6 +23,8 @@ __license__ = "GPLv3"
 
 #include <unistd.h>
 
+#define  ZLIB_MAGIC "ZLIB"
+
 /* Different CPU 4bits from SHARP */
 #define  ROM_CPU_SM5A        "SM5A_"
 #define  ROM_CPU_SM500       "SM500"
@@ -88,13 +90,16 @@ typedef struct gwromheader_s
    char rom_signature[8]           ;
 
    /* Address counter time used by the program to manage it RTC */
-   unsigned char time_hour_adress  ;
-   unsigned char time_second_adress;
+   unsigned char time_hour_address_msb;
+   unsigned char time_hour_address_lsb;   
+   unsigned char time_min_address_msb ;
+   unsigned char time_min_address_lsb ;
+   unsigned char time_sec_address_msb ;
+   unsigned char time_sec_address_lsb ;
+   unsigned char time_hour_msb_pm;
 
    /* spare reserved for futur used */
    unsigned char byte_spare1       ;
-   unsigned char byte_spare2       ;
-   unsigned int int_spare2         ;
 
    /* Flags to describe hardware : buzzer and lcd deflicker filter */
    unsigned int flags                  ;

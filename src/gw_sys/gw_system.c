@@ -36,7 +36,7 @@ static void (*device_start)();
 static void (*device_run)();
 static void (*device_blit)(unsigned short *active_framebuffer);
 
-static unsigned char last_joystick;
+static unsigned char previous_dpad;
 static bool gw_keyboard_multikey[8];
 
 /* map functions and custom configuration */
@@ -120,8 +120,8 @@ bool gw_system_config()
 			gw_keyboard_multikey[i] = true;
 	}
 
-	/* init joystick to default position */
-	last_joystick = 0;
+	/* init dpad to default position */
+	previous_dpad = 0;
 
 	/* depending on the CPU, set functions pointers */
 
@@ -313,13 +313,103 @@ unsigned char gw_readBA()
 	return 1;
 }
 
+/*
+Patch to  improve gameplay of "green House" when it's in rotated view
+
+# A specific custom keyboard is implemented for "Green House" when screen is rotated.
+# It permits to play in rotate view with DPAD only.
+# According to the character postion, the Button A is emulated over DPAD keys press.
+#                 ~ ~   ~ ~
+#                 A B C D E
+#                 ~   F   ~
+#                  ~  G  ~ 
+#                   H I J
+#
+#In positions :
+# A, H : LEFT or UP emulates Button A
+# B, D : UP emulates Button A
+# E, J : RIGHT or UP emulates Button A
+# C,F,G,I :ignore
+#
+#SM51X series: output to x.y.z, where:
+	# x = group a/b/bs/c (0/1/2/3)
+	# y = segment 1-16 (0-15)
+	# z = common H1-H4 (0-3)
+
+#    CPU RAM display 
+#	0X50.. 0X5F : c1..c16 (base=80)
+#	0X60.. 0X6F : a1..a16 (base=96)
+#	0X70.. 0X7F : b1..b16 (base=112)
+
+# Position: segment      : RAM   MASk
+#        A  h1b7  1.6.0    118   0x1
+#        B  h1b12 1.11.0   123   0x1
+#        C  h1a13 0.12.0   108   0x1
+#        D  h1b13 1.12.0   124   0x1
+#        E  h1a15 0.14.0   110   0x1
+#        F  h3b3  1.2.2    114   0x4
+#        G  h2b3  1.2.1    114   0x2
+#        H  h1a4  0.3.0     99   0x1
+#        I  h1b3  1.2.0    114   0x1
+#        J  h1a3  0.2.0     98   0x1
+*/
+
+static unsigned int patch_gnw_ghouse_keys_rotated_view(unsigned int keys_pressed) {
+
+	// check if it's in rotated view by checking the keys mapping
+	// K1 = rom.BTN_DOWN 
+    // K2 = rom.BTN_RIGHT
+    // K3 = rom.BTN_UP
+    // K4 = rom.BTN_LEFT 
+    // rom.BTN_DATA[rom.S2] = K1 | (K2 << 8) | (K3 << 16) | (K4 << 24)
+
+	if ( gw_keyboard[1] != ( (GW_BUTTON_LEFT << 24) + (GW_BUTTON_RIGHT << 8) + (GW_BUTTON_UP << 16)  + GW_BUTTON_DOWN) ) return keys_pressed;
+
+	// Check position CFGI
+	if (gw_ram[108] & 0x1) return keys_pressed;
+	if (gw_ram[114] & 0x4) return keys_pressed;
+	if (gw_ram[114] & 0x2) return keys_pressed;
+	if (gw_ram[114] & 0x1) return keys_pressed;
+
+	// Check position AH
+	if ( (gw_ram[118] & 0x1) | (gw_ram[99] & 0x1) ) {
+		if ( (keys_pressed & (GW_BUTTON_RIGHT+GW_BUTTON_UP) ) )
+			keys_pressed = GW_BUTTON_A; 
+	}
+	// Check position BD
+	if ( (gw_ram[123] & 0x1) | (gw_ram[124] & 0x1) ) {
+		if ( (keys_pressed & GW_BUTTON_RIGHT) )
+			keys_pressed = GW_BUTTON_A;
+	}
+	// Check position EJ
+	if ( (gw_ram[110] & 0x1) | (gw_ram[98] & 0x1) ) {
+		if ( (keys_pressed & (GW_BUTTON_RIGHT+GW_BUTTON_DOWN)) )
+			keys_pressed = GW_BUTTON_A;
+	}
+
+	return keys_pressed;
+}
+
 // default value is 0 (Pull-down)
 unsigned char gw_readK(unsigned char io_S)
 {
 
 	unsigned char io_K = 0;
+	static unsigned int dpad_shortcut_diagonal_pressed  = 0;
+	static unsigned int dpad_shortcut_diagonal_hold     = 0;
 
 	unsigned int keys_pressed = gw_get_buttons() & 0xff;
+
+	/* Hack to improve gameplay for "Green House" in rotated view */
+	if (memcmp(gw_head.rom_signature, "w_ghouse", 8) == 0 ) keys_pressed = patch_gnw_ghouse_keys_rotated_view(keys_pressed);
+	/**********************************************/
+
+	/* monitor A button as diagonal shortcut when pressed */
+	if ((keys_pressed & GW_BUTTON_A) != 0) dpad_shortcut_diagonal_pressed = 1;
+	if ( (keys_pressed & GW_BUTTON_A) == 0) {
+		dpad_shortcut_diagonal_hold = 0;
+		dpad_shortcut_diagonal_pressed = 0;
+	}
 
 	if (keys_pressed == 0)
 		return 0;
@@ -328,49 +418,58 @@ unsigned char gw_readK(unsigned char io_S)
 	{
 		if (((io_S >> Sx) & 0x1) != 0)
 		{
-			// DPAD multi-key with relative change
+			// DPAD multi-key with relative change and shortcut
 			if (gw_keyboard_multikey[Sx])
 			{
+
 				// keep only relevant DPAD keys
 				keys_pressed = keys_pressed & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
 
-				// manage when a single key is pressed but the emulated game expects
-				// reuse the previous DPAD value (last_joystick) and add a complementary key
+				// manage when a single key is pressed but the emulated game expects only diagonal keys combination
+				// reuse the previous DPAD value (previous_dpad) and add a complementary key
+
+				if ( (dpad_shortcut_diagonal_pressed == 1 ) & (dpad_shortcut_diagonal_hold == 0)) {
+						dpad_shortcut_diagonal_hold = 1;
+						keys_pressed = ~previous_dpad & \
+						(GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
+				}
+
 				if (keys_pressed == GW_BUTTON_LEFT)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
+					keys_pressed = (previous_dpad & (GW_BUTTON_UP + GW_BUTTON_DOWN)) | GW_BUTTON_LEFT;
 
 				if (keys_pressed == GW_BUTTON_RIGHT)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
+					keys_pressed = (previous_dpad & (GW_BUTTON_UP + GW_BUTTON_DOWN)) | GW_BUTTON_RIGHT;
 
 				if (keys_pressed == GW_BUTTON_DOWN)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_UP)) | GW_BUTTON_DOWN;
+					keys_pressed = (previous_dpad & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT)) | GW_BUTTON_DOWN;
 
 				if (keys_pressed == GW_BUTTON_UP)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_DOWN)) | GW_BUTTON_UP;
+					keys_pressed = (previous_dpad & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT)) | GW_BUTTON_UP;
 
+				
 				if ((gw_keyboard[Sx] & GW_MASK_K1) == keys_pressed)
 				{
 					io_K |= 0x1;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 
 				// perform  key checking (exclusively, all keys shall match)
 				if ((gw_keyboard[Sx] & GW_MASK_K2) == (keys_pressed << 8))
 				{
 					io_K |= 0x2;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 
 				if ((gw_keyboard[Sx] & GW_MASK_K3) == (keys_pressed << 16))
 				{
 					io_K |= 0x4;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 
 				if ((gw_keyboard[Sx] & GW_MASK_K4) == (keys_pressed << 24))
 				{
 					io_K |= 0x8;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 
 				// (Non DPAD case) perform key checking (at least one key shall match)
@@ -393,42 +492,55 @@ unsigned char gw_readK(unsigned char io_S)
 		// same algorithm as previously
 		if (io_S == 0)
 		{
+			//dpad and shortcut
 			if (gw_keyboard_multikey[1])
 			{
 
+				// keep only relevant DPAD keys
 				keys_pressed = keys_pressed & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
 
+				// manage when a single key is pressed but the emulated game expects only diagonal keys combination
+				// reuse the previous DPAD value (previous_dpad) and add a complementary key
+
+				if ( (dpad_shortcut_diagonal_pressed == 1 ) & (dpad_shortcut_diagonal_hold == 0)) {
+						dpad_shortcut_diagonal_hold = 1;
+						// toogle dpad values to move in diagonal
+						keys_pressed = ~previous_dpad & \
+						(GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
+
+				}
+
 				if (keys_pressed == GW_BUTTON_LEFT)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_RIGHT)) | GW_BUTTON_LEFT;
+					keys_pressed = (previous_dpad & (GW_BUTTON_UP + GW_BUTTON_DOWN)) | GW_BUTTON_LEFT;
 
 				if (keys_pressed == GW_BUTTON_RIGHT)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_LEFT)) | GW_BUTTON_RIGHT;
+					keys_pressed = (previous_dpad & (GW_BUTTON_UP + GW_BUTTON_DOWN)) | GW_BUTTON_RIGHT;
 
 				if (keys_pressed == GW_BUTTON_DOWN)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_UP)) | GW_BUTTON_DOWN;
+					keys_pressed = (previous_dpad & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT)) | GW_BUTTON_DOWN;
 
 				if (keys_pressed == GW_BUTTON_UP)
-					keys_pressed = (last_joystick & (0xFF - GW_BUTTON_DOWN)) | GW_BUTTON_UP;
+					keys_pressed = (previous_dpad & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT)) | GW_BUTTON_UP;
 
 				if ((gw_keyboard[1] & GW_MASK_K1) == keys_pressed)
 				{
 					io_K |= 0x1;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 				if ((gw_keyboard[1] & GW_MASK_K2) == (keys_pressed << 8))
 				{
 					io_K |= 0x2;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 				if ((gw_keyboard[1] & GW_MASK_K3) == (keys_pressed << 16))
 				{
 					io_K |= 0x4;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 				if ((gw_keyboard[1] & GW_MASK_K4) == (keys_pressed << 24))
 				{
 					io_K |= 0x8;
-					last_joystick = keys_pressed;
+					previous_dpad = keys_pressed;
 				}
 			}
 			else
@@ -637,4 +749,108 @@ bool gw_state_load(unsigned char *src_ptr)
 	m_rsub = (bool)save_state.bool_m_rsub;
 
 	return true;
+}
+
+gw_time_t gw_system_get_time()
+{
+	gw_time_t time = {0};
+
+	/* Rom hour is not set ? */
+	if ((gw_head.time_hour_address_msb == 0) && (gw_head.time_hour_address_lsb == 0)) {
+
+		// return time.hours > 24 to indicate the feature is not support
+		time.hours = 127;
+		return time;
+	}
+
+	// AM/PM is not supported
+	if (gw_head.time_hour_msb_pm == 0) {
+
+		// return time.hours > 24 to indicate the feature is not support
+		time.hours = 127;
+		return time;
+	}
+
+	unsigned int hour_msb;
+	unsigned int hour_lsb;
+	unsigned int pm_flag;
+
+
+	hour_msb = gw_ram[gw_head.time_hour_address_msb]; 
+	hour_lsb = gw_ram[gw_head.time_hour_address_lsb];
+	pm_flag  = gw_head.time_hour_msb_pm;
+
+	/* Minutes */
+	time.minutes = (gw_ram[gw_head.time_min_address_msb] * 10) + \
+	gw_ram[gw_head.time_min_address_lsb];
+
+	/* Seconds */
+	time.seconds = (gw_ram[gw_head.time_sec_address_msb] * 10) + \
+	gw_ram[gw_head.time_sec_address_msb];
+
+	//PM
+	if (hour_msb & pm_flag) {
+		hour_msb  = hour_msb & ~pm_flag;
+
+		// PM12
+		if ( (hour_msb == 1) && (hour_lsb == 2) ) time.hours = 12;
+
+		// PM1 <-> PM11
+		else time.hours = (10 * hour_msb) + 12 + hour_lsb;  
+
+	//AM
+	} else {
+		// AM12
+		if ( (hour_msb == 1) && (hour_lsb == 2) ) time.hours = 0;
+
+		// AM1 <-> AM11
+		else time.hours = (10 * hour_msb) + hour_lsb;
+	}
+
+	return time;
+
+}
+
+void gw_system_set_time(gw_time_t time)
+{
+	/* Rom hour is not set ? */
+	if ((gw_head.time_hour_address_msb == 0) & (gw_head.time_hour_address_lsb == 0))
+		return;
+
+	/* Hours */
+	// AM1 <-> AM11
+	if ((time.hours > 0) && (time.hours < 12))
+	{
+		gw_ram[gw_head.time_hour_address_msb] = time.hours / 10;
+		gw_ram[gw_head.time_hour_address_lsb] = time.hours % 10;
+	}
+
+	// AM12
+	if (time.hours == 0)
+	{
+		gw_ram[gw_head.time_hour_address_msb] = 1;
+		gw_ram[gw_head.time_hour_address_lsb] = 2;
+	}
+
+	// PM12
+	if (time.hours == 12)
+	{
+		gw_ram[gw_head.time_hour_address_msb] = gw_head.time_hour_msb_pm + 1;
+		gw_ram[gw_head.time_hour_address_lsb] = 2;
+	}
+
+	// PM1 <-> PM11
+	if (time.hours > 12)
+	{
+		gw_ram[gw_head.time_hour_address_msb] = gw_head.time_hour_msb_pm + ((time.hours - 12) / 10);
+		gw_ram[gw_head.time_hour_address_lsb] = (time.hours - 12) % 10;
+	}
+
+	/* Minutes */
+	gw_ram[gw_head.time_min_address_msb] = time.minutes / 10;
+	gw_ram[gw_head.time_min_address_lsb] = time.minutes % 10;
+
+	/* Seconds */
+	gw_ram[gw_head.time_sec_address_msb] = time.seconds / 10;
+	gw_ram[gw_head.time_sec_address_msb] = time.seconds % 10;
 }

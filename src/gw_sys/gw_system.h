@@ -61,6 +61,16 @@ unsigned int gw_get_buttons();
 bool gw_state_load(unsigned char *src_ptr);
 bool gw_state_save(unsigned char *dest_ptr);
 
+typedef struct gw_time_s
+{
+    unsigned char hours; // 24 format
+    unsigned char minutes;
+    unsigned char seconds;
+} gw_time_t;
+
+void gw_system_set_time(gw_time_t time);
+gw_time_t gw_system_get_time();
+
 /* shared audio buffer between host and emulator */
 extern unsigned char gw_audio_buffer[GW_AUDIO_BUFFER_LENGTH * 2];
 extern bool gw_audio_buffer_copied;
