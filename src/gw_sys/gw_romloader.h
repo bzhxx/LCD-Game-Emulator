@@ -24,6 +24,7 @@ __license__ = "GPLv3"
 #include <unistd.h>
 
 #define  ZLIB_MAGIC "ZLIB"
+#define  LZMA_MAGIC "LZMA"
 
 /* Different CPU 4bits from SHARP */
 #define  ROM_CPU_SM5A        "SM5A_"

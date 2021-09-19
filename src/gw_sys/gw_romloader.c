@@ -27,15 +27,19 @@ __license__ = "GPLv3"
 #include <assert.h>
 
 #define GW_ROM_LZ4_SUPPORT
+#define GW_ROM_ZOPFLI_SUPPORT
+#define GW_ROM_LZMA_SUPPORT
 
 #ifdef GW_ROM_LZ4_SUPPORT
 #include "lz4_depack.h"
 #endif
 
-#define GW_ROM_ZOPFLI_SUPPORT
-
 #ifdef GW_ROM_ZOPFLI_SUPPORT
 #include "miniz.h"
+#endif
+
+#ifdef GW_ROM_LZMA_SUPPORT
+#include "lzma.h"
 #endif
 
 #include "gw_type_defs.h"
@@ -200,6 +204,30 @@ bool gw_romloader_rom2ram()
          printf("ROM ZLIB : header KO\n");
          return false;
       }
+#endif
+
+#ifdef GW_ROM_LZMA_SUPPORT
+   }
+   else if (memcmp(src, LZMA_MAGIC,4) == 0)
+   {
+
+      /* DEFLATE decompression */
+      printf("ROM LZMA detected.\n");
+      memcpy(&rom_size_compressed_src, &src[4], sizeof(rom_size_compressed_src));
+
+      size_t n_decomp_bytes;
+      n_decomp_bytes = lzma_inflate(dest, GW_ROM_SIZE_MAX, &src[8], rom_size_compressed_src);
+      rom_size_src = (uint32_t) n_decomp_bytes;
+
+      if ((memcmp(dest, ROM_CPU_SM510, 3) == 0))
+      {
+         printf("ROM LZMA : header OK\n");
+      }
+      else
+      {
+         printf("ROM LZMA : header KO\n");
+         return false;
+      }
 
 #endif
       /* Something wrong in the ROM detection... */
@@ -238,33 +266,32 @@ bool gw_romloader_rom2ram()
       gw_background = (unsigned short *)&GW_ROM[gw_head.background_pixel];
    }
    // otherwise we get the background from JPEG file
-   else if(rom_size_compressed_src != ROM_DATA_LENGTH)
+   else if((rom_size_compressed_src+8) != ROM_DATA_LENGTH)
    {
       printf("JPEG background?\n");
 
       /* JPEG decoder : from Flash to RAM */
-      static uint32_t JpegSrc;
-      static uint32_t FrameDst;
+      uint32_t JpegSrc;
+      uint32_t FrameDst;
 
-      JpegSrc = (uint32_t)&ROM_DATA[rom_size_compressed_src];
+      JpegSrc = (uint32_t)&ROM_DATA[rom_size_compressed_src+8];
 
       /*set destination RGB image, 32 bits aligned */
       FrameDst = (uint32_t)&GW_ROM[rom_size_src + 4 - (rom_size_src % 4)];
 
+      assert(JPEG_DecodeToFrameInit((uint32_t)&JPEG_Buffer,JPEG_BUFFER_SIZE) == 0);
+    
+      // get jpeg image size
 
-      assert(JPEG_DecodeInit((uint32_t)&JPEG_Buffer,JPEG_BUFFER_SIZE) == 0);
-      // decode background
-      JPEG_Decode(JpegSrc, FrameDst, 0, 0);
+      //determine center position
+      uint32_t xImg=0, yImg=0, wImg=0,hImg=0;
+      assert (0 == JPEG_DecodeGetSize(JpegSrc, &wImg, &hImg));
 
-      // for ( uint32_t i=0; i<100; i++){
-      //    a = xPos + ((yPos+i) * LCD_X_Size) ;
-      //    b = 320-50 + ((yPos+i) * LCD_X_Size) ;
+      xImg = ( GW_SCREEN_WIDTH - wImg )/2;
+      yImg = ( GW_SCREEN_HEIGHT - hImg )/2;
 
-      //    a=FrameDst+2*a;
-      //    b=FrameDst+2*b;
-
-      //    memcpy( (uint8_t *)b, (uint8_t *)a, (size_t)2*50);
-      // }
+      // decode background and copy it in the righ place in the frame buffer
+      assert( 0 == JPEG_DecodeToFrame(JpegSrc, FrameDst, xImg, yImg, 0xFF));
 
       assert(JPEG_DecodeDeInit() == 0);
 
