@@ -73,12 +73,63 @@ static inline uint16 rgb_multiply_8bits(uint32 bg, uint32 sg)
 	return (uint16)(bg_r << 11) | (bg_g << 5) | bg_b;
 }
 
-/************************ Generic function to display/erase a segment *****************/
+/************************ Generic function to display a segment *****************/
 void (*update_segment)(uint8 segment_nb, bool segment_state);
 
 /* Segment to framebuffer graphic function */
 /* segments are stored from 0 to 255 in memory*/
 
+/* Deviation 2bits segment resolution function */
+__attribute__((optimize("unroll-loops"))) static inline void update_segment_2bits(uint8 segment_nb, bool segment_state)
+{
+
+	/* segment first pixel corner (up/left) */
+	uint32 segment = gw_segments_offset[segment_nb];
+
+	uint8 cur_pixel,cur_pixelr;
+	int idx = 0;
+
+	/* nothing to do for this segment */
+	if (segment_state == 0)
+		return;
+
+	/* 4bits data size access */
+	idx = segment & 0x3;
+	segment = segment >> 2;
+
+	uint8 *pixel;
+	pixel = &gw_segments[segment];
+
+	/* get segment coordinates */
+	uint16 segments_x = gw_segments_x[segment_nb];
+	uint16 segments_y = gw_segments_y[segment_nb];
+	uint16 segments_width = gw_segments_width[segment_nb];
+	uint16 segments_height = gw_segments_height[segment_nb];
+
+	for (int line = segments_y; line < segments_height + segments_y; line++)
+	{
+		for (int x = segments_x; x < segments_width + segments_x; x++)
+		{
+
+			cur_pixelr = (pixel[idx >> 2] >> 2*(idx & 0x3)) &0x3;
+
+			idx++;
+
+			cur_pixel = cur_pixelr | cur_pixelr << 2 | cur_pixelr << 4 | cur_pixelr << 6;
+
+
+			/* Check if there something to mix
+			if the segment pixel is transparent nothing to do. */
+			if (cur_pixel != SEG_TRANSPARENT_COLOR) {
+			
+			// change black color to get transparency effect
+			if ( cur_pixel == 0 ) cur_pixel = 39;
+			gw_graphic_framebuffer[line * GW_SCREEN_WIDTH + x] = rgb_multiply_8bits(source_mixer[line * GW_SCREEN_WIDTH + x], cur_pixel);
+			}
+
+		}
+	}
+}
 /* Deviation 4bits segment resolution function */
 __attribute__((optimize("unroll-loops"))) static inline void update_segment_4bits(uint8 segment_nb, bool segment_state)
 {
@@ -335,8 +386,11 @@ void gw_gfx_init()
 	deflicker_enabled = (flag_lcd_deflicker_level != 0);
 
 	/* determine which API to use for segments rendering */
+	update_segment = update_segment_8bits;
+
 	if (gw_head.flags & FLAG_SEGMENTS_4BITS)
 		update_segment = update_segment_4bits;
-	else
-		update_segment = update_segment_8bits;
+	if (gw_head.flags & FLAG_SEGMENTS_2BITS)
+		update_segment = update_segment_2bits;
+
 }

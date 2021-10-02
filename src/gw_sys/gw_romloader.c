@@ -279,6 +279,9 @@ bool gw_romloader_rom2ram()
       /*set destination RGB image, 32 bits aligned */
       FrameDst = (uint32_t)&GW_ROM[rom_size_src + 4 - (rom_size_src % 4)];
 
+      /* cleanup Frame buffer with black color (in case of background cropped) */
+      memset((unsigned char *)FrameDst, 0x0, GW_SCREEN_HEIGHT*GW_SCREEN_WIDTH*2);
+
       assert(JPEG_DecodeToFrameInit((uint32_t)&JPEG_Buffer,JPEG_BUFFER_SIZE) == 0);
     
       // get jpeg image size
