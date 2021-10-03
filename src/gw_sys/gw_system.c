@@ -786,7 +786,7 @@ gw_time_t gw_system_get_time()
 
 	/* Seconds */
 	time.seconds = (gw_ram[gw_head.time_sec_address_msb] * 10) + \
-	gw_ram[gw_head.time_sec_address_msb];
+	gw_ram[gw_head.time_sec_address_lsb];
 
 	//PM
 	if (hour_msb & pm_flag) {
@@ -852,5 +852,5 @@ void gw_system_set_time(gw_time_t time)
 
 	/* Seconds */
 	gw_ram[gw_head.time_sec_address_msb] = time.seconds / 10;
-	gw_ram[gw_head.time_sec_address_msb] = time.seconds % 10;
+	gw_ram[gw_head.time_sec_address_lsb] = time.seconds % 10;
 }
