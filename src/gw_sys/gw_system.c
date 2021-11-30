@@ -274,13 +274,13 @@ void gw_writeR(unsigned char data) { gw_system_sound_melody(data); };
 /*
  S[8]xK[4],B and BA keys input function
  8 buttons, state known using gw_get_buttons()
- gw_get_buttons() : returns 
+ gw_get_buttons() : returns
  left         | (up << 1)   | (right << 2) | (down << 3) |
  (a << 4)     | (b << 5)    | (time << 6)  | (game << 7) |
  (pause << 8) | (power << 9)
-	
+
  We use only 8bits LSB, pause and power are ignored
-	
+
 */
 
 // default value is 1 (Pull-up)
@@ -322,7 +322,7 @@ Patch to  improve gameplay of "green House" when it's in rotated view
 #                 ~ ~   ~ ~
 #                 A B C D E
 #                 ~   F   ~
-#                  ~  G  ~ 
+#                  ~  G  ~
 #                   H I J
 #
 #In positions :
@@ -336,7 +336,7 @@ Patch to  improve gameplay of "green House" when it's in rotated view
 	# y = segment 1-16 (0-15)
 	# z = common H1-H4 (0-3)
 
-#    CPU RAM display 
+#    CPU RAM display
 #	0X50.. 0X5F : c1..c16 (base=80)
 #	0X60.. 0X6F : a1..a16 (base=96)
 #	0X70.. 0X7F : b1..b16 (base=112)
@@ -357,10 +357,10 @@ Patch to  improve gameplay of "green House" when it's in rotated view
 static unsigned int patch_gnw_ghouse_keys_rotated_view(unsigned int keys_pressed) {
 
 	// check if it's in rotated view by checking the keys mapping
-	// K1 = rom.BTN_DOWN 
+	// K1 = rom.BTN_DOWN
     // K2 = rom.BTN_RIGHT
     // K3 = rom.BTN_UP
-    // K4 = rom.BTN_LEFT 
+    // K4 = rom.BTN_LEFT
     // rom.BTN_DATA[rom.S2] = K1 | (K2 << 8) | (K3 << 16) | (K4 << 24)
 
 	if ( gw_keyboard[1] != ( (GW_BUTTON_LEFT << 24) + (GW_BUTTON_RIGHT << 8) + (GW_BUTTON_UP << 16)  + GW_BUTTON_DOWN) ) return keys_pressed;
@@ -374,7 +374,7 @@ static unsigned int patch_gnw_ghouse_keys_rotated_view(unsigned int keys_pressed
 	// Check position AH
 	if ( (gw_ram[118] & 0x1) | (gw_ram[99] & 0x1) ) {
 		if ( (keys_pressed & (GW_BUTTON_RIGHT+GW_BUTTON_UP) ) )
-			keys_pressed = GW_BUTTON_A; 
+			keys_pressed = GW_BUTTON_A;
 	}
 	// Check position BD
 	if ( (gw_ram[123] & 0x1) | (gw_ram[124] & 0x1) ) {
@@ -395,10 +395,39 @@ unsigned char gw_readK(unsigned char io_S)
 {
 
 	unsigned char io_K = 0;
-	static unsigned int dpad_shortcut_diagonal_pressed  = 0;
-	static unsigned int dpad_shortcut_diagonal_hold     = 0;
+	static unsigned int dpad_shortcut_diagonal_pressed = 0;
+	static unsigned int dpad_shortcut_diagonal_hold = 0;
 
-	unsigned int keys_pressed = gw_get_buttons() & 0xff;
+	unsigned int gw_buttons = gw_get_buttons();
+
+	unsigned int keys_pressed = gw_buttons & 0xff;
+
+	unsigned int key_soft_value = 0;
+
+	const unsigned int KEY_SOFT_TIME = GW_BUTTON_B + GW_BUTTON_TIME;
+	const unsigned int KEY_SOFT_ALARM = GW_BUTTON_B + GW_BUTTON_GAME;
+
+	if ((gw_buttons >> 10) & 1)
+	{
+		keys_pressed = 0;
+		key_soft_value = KEY_SOFT_TIME;
+	}
+	if ((gw_buttons >> 11) & 1)
+	{
+		keys_pressed = 0;
+		key_soft_value = KEY_SOFT_ALARM;
+	}
+
+	if (keys_pressed == KEY_SOFT_ALARM) {
+		key_soft_value = KEY_SOFT_ALARM;
+		keys_pressed = 0;
+	}
+
+	if (keys_pressed == KEY_SOFT_TIME) {
+		key_soft_value = KEY_SOFT_TIME;
+		keys_pressed = 0;
+	}
+
 
 	/* Hack to improve gameplay for "Green House" in rotated view */
 	if (memcmp(gw_head.rom_signature, "w_ghouse", 8) == 0 ) keys_pressed = patch_gnw_ghouse_keys_rotated_view(keys_pressed);
@@ -411,11 +440,15 @@ unsigned char gw_readK(unsigned char io_S)
 		dpad_shortcut_diagonal_pressed = 0;
 	}
 
-	if (keys_pressed == 0)
+	if ((keys_pressed == 0) & (key_soft_value == 0))
 		return 0;
 
 	for (int Sx = 0; Sx < 8; Sx++)
 	{
+
+		//case of R/S output is not used to poll buttons (used R2 or S2 configuration)
+		if (io_S == 0) io_S = 2;
+
 		if (((io_S >> Sx) & 0x1) != 0)
 		{
 			// DPAD multi-key with relative change and shortcut
@@ -428,10 +461,11 @@ unsigned char gw_readK(unsigned char io_S)
 				// manage when a single key is pressed but the emulated game expects only diagonal keys combination
 				// reuse the previous DPAD value (previous_dpad) and add a complementary key
 
-				if ( (dpad_shortcut_diagonal_pressed == 1 ) & (dpad_shortcut_diagonal_hold == 0)) {
-						dpad_shortcut_diagonal_hold = 1;
-						keys_pressed = ~previous_dpad & \
-						(GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
+				if ((dpad_shortcut_diagonal_pressed == 1) & (dpad_shortcut_diagonal_hold == 0))
+				{
+					dpad_shortcut_diagonal_hold = 1;
+					keys_pressed = ~previous_dpad &
+								   (GW_BUTTON_LEFT + GW_BUTTON_RIGHT + GW_BUTTON_UP + GW_BUTTON_DOWN);
 				}
 
 				if (keys_pressed == GW_BUTTON_LEFT)
@@ -446,7 +480,6 @@ unsigned char gw_readK(unsigned char io_S)
 				if (keys_pressed == GW_BUTTON_UP)
 					keys_pressed = (previous_dpad & (GW_BUTTON_LEFT + GW_BUTTON_RIGHT)) | GW_BUTTON_UP;
 
-				
 				if ((gw_keyboard[Sx] & GW_MASK_K1) == keys_pressed)
 				{
 					io_K |= 0x1;
@@ -477,20 +510,44 @@ unsigned char gw_readK(unsigned char io_S)
 			else
 			{
 
-				if (((gw_keyboard[Sx] & GW_MASK_K1) & (keys_pressed)) != 0)
-					io_K |= 0x1;
-				if (((gw_keyboard[Sx] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
-					io_K |= 0x2;
-				if (((gw_keyboard[Sx] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
-					io_K |= 0x4;
-				if (((gw_keyboard[Sx] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
-					io_K |= 0x8;
+				// check soft keys
+				if ( key_soft_value != 0 )
+				{
+					if (((gw_keyboard[Sx] & GW_MASK_K1) == (key_soft_value)))
+						io_K |= 0x1;
+					if (((gw_keyboard[Sx] & GW_MASK_K2) == (key_soft_value << 8)))
+						io_K |= 0x2;
+					if (((gw_keyboard[Sx] & GW_MASK_K3) == (key_soft_value << 16)))
+						io_K |= 0x4;
+					if (((gw_keyboard[Sx] & GW_MASK_K4) == (key_soft_value << 24)))
+						io_K |= 0x8;
+				}
+
+				// check hardware keys excluding soft keys
+				else
+				{
+					if (((gw_keyboard[Sx] & GW_MASK_K1) & (keys_pressed)) != 0)
+						if ( ( (gw_keyboard[Sx] & GW_MASK_K1) != (KEY_SOFT_ALARM) )  & ( (gw_keyboard[Sx] & GW_MASK_K1) != (KEY_SOFT_TIME) ) )
+							io_K |= 0x1;
+
+					if (((gw_keyboard[Sx] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
+						if ( ( (gw_keyboard[Sx] & GW_MASK_K2) != (KEY_SOFT_ALARM << 8) )  & ( (gw_keyboard[Sx] & GW_MASK_K2) != (KEY_SOFT_TIME << 8) ) )
+
+							io_K |= 0x2;
+					if (((gw_keyboard[Sx] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
+							if ( ( (gw_keyboard[Sx] & GW_MASK_K3) != (KEY_SOFT_ALARM << 16) )  & ( (gw_keyboard[Sx] & GW_MASK_K3) != (KEY_SOFT_TIME << 16) ) )
+
+							io_K |= 0x4;
+					if (((gw_keyboard[Sx] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
+							if ( ( (gw_keyboard[Sx] & GW_MASK_K4) != (KEY_SOFT_ALARM << 24) )  & ( (gw_keyboard[Sx] & GW_MASK_K4) != (KEY_SOFT_TIME << 24) ) )
+
+							io_K |= 0x8;
+				}
 			}
 		}
-
 		//case of R/S output is not used to poll buttons (used R2 or S2 configuration)
 		// same algorithm as previously
-		if (io_S == 0)
+/* 		if (io_S == 0)
 		{
 			//dpad and shortcut
 			if (gw_keyboard_multikey[1])
@@ -545,16 +602,35 @@ unsigned char gw_readK(unsigned char io_S)
 			}
 			else
 			{
-				if (((gw_keyboard[1] & GW_MASK_K1) & (keys_pressed)) != 0)
-					io_K |= 0x1;
-				if (((gw_keyboard[1] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
-					io_K |= 0x2;
-				if (((gw_keyboard[1] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
-					io_K |= 0x4;
-				if (((gw_keyboard[1] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
-					io_K |= 0x8;
+
+				// check soft key
+				if (key_soft_value)
+				{
+
+					if (((gw_keyboard[1] & GW_MASK_K1) == (key_soft_value)))
+						io_K |= 0x1;
+					if (((gw_keyboard[1] & GW_MASK_K2) == (key_soft_value << 8)))
+						io_K |= 0x2;
+					if (((gw_keyboard[1] & GW_MASK_K3) == (key_soft_value << 16)))
+						io_K |= 0x4;
+					if (((gw_keyboard[1] & GW_MASK_K4) == (key_soft_value << 24)))
+						io_K |= 0x8;
+				}
+				else
+				{
+					if ( (gw_keyboard[1] != KEY_SOFT_TIME) | (gw_keyboard[1] !=KEY_SOFT_ALARM) )	{
+							if (((gw_keyboard[1] & GW_MASK_K1) & (keys_pressed)) != 0)
+								io_K |= 0x1;
+							if (((gw_keyboard[1] & GW_MASK_K2) & (keys_pressed << 8)) != 0)
+								io_K |= 0x2;
+							if (((gw_keyboard[1] & GW_MASK_K3) & (keys_pressed << 16)) != 0)
+								io_K |= 0x4;
+							if (((gw_keyboard[1] & GW_MASK_K4) & (keys_pressed << 24)) != 0)
+								io_K |= 0x8;
+						}
+				}
 			}
-		}
+		} */
 	}
 
 	return io_K & 0xf;
@@ -776,7 +852,7 @@ gw_time_t gw_system_get_time()
 	unsigned int pm_flag;
 
 
-	hour_msb = gw_ram[gw_head.time_hour_address_msb]; 
+	hour_msb = gw_ram[gw_head.time_hour_address_msb];
 	hour_lsb = gw_ram[gw_head.time_hour_address_lsb];
 	pm_flag  = gw_head.time_hour_msb_pm;
 
@@ -796,7 +872,7 @@ gw_time_t gw_system_get_time()
 		if ( (hour_msb == 1) && (hour_lsb == 2) ) time.hours = 12;
 
 		// PM1 <-> PM11
-		else time.hours = (10 * hour_msb) + 12 + hour_lsb;  
+		else time.hours = (10 * hour_msb) + 12 + hour_lsb;
 
 	//AM
 	} else {
