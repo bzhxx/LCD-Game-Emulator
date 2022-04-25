@@ -163,7 +163,7 @@ bool gw_romloader_rom2ram()
    else if (memcmp(src, LZ4_MAGIC, 4) == 0)
    {
       printf("ROM LZ4 detected\n");
-      rom_size_compressed_src = lz4_get_file_size(src);
+      rom_size_compressed_src = lz4_get_original_size(src);
 
       rom_size_src = lz4_uncompress(src, dest);
 
