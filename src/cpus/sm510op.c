@@ -1,3 +1,6 @@
+#include "build/config.h"
+
+#ifdef ENABLE_EMULATOR_GW
 // license:BSD-3-Clause
 // copyright-holders:hap
 // modded by bzhxx
@@ -460,3 +463,5 @@ void sm510_op_illegal()
 	printf("unknown opcode $%02X at $%04X\n", m_op, m_prev_pc);
 	assert(0);
 }
+
+#endif

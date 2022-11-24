@@ -1,3 +1,6 @@
+#include "build/config.h"
+
+#ifdef ENABLE_EMULATOR_GW
 // license:BSD-3-Clause
 // copyright-holders:hap
 // modded by bzhxx
@@ -200,3 +203,5 @@ inline void increment_pc()
 	int feed = ((m_pc >> 1 ^ m_pc) & 1) ? 0 : 0x20;
 	m_pc = feed | (m_pc >> 1 & 0x1f) | (m_pc & ~0x3f);
 }
+
+#endif
