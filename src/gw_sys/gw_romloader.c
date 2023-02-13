@@ -29,17 +29,7 @@ __license__ = "GPLv3"
 #include <stdio.h>
 #include <assert.h>
 
-#define GW_ROM_LZ4_SUPPORT
-#define GW_ROM_ZOPFLI_SUPPORT
 #define GW_ROM_LZMA_SUPPORT
-
-#ifdef GW_ROM_LZ4_SUPPORT
-#include "lz4_depack.h"
-#endif
-
-#ifdef GW_ROM_ZOPFLI_SUPPORT
-#include "miniz.h"
-#endif
 
 #ifdef GW_ROM_LZMA_SUPPORT
 #include "lzma.h"
@@ -158,56 +148,6 @@ bool gw_romloader_rom2ram()
       printf("ROM2RAM done\n");
 
       rom_size_src = ROM_DATA_LENGTH;
-
-#ifdef GW_ROM_LZ4_SUPPORT
-
-      /* Check if it's compressed */
-   }
-   else if (memcmp(src, LZ4_MAGIC, 4) == 0)
-   {
-      printf("ROM LZ4 detected\n");
-      rom_size_compressed_src = lz4_get_file_size(src);
-
-      rom_size_src = lz4_uncompress(src, dest);
-
-      if ((memcmp(dest, ROM_CPU_SM510, 3) == 0))
-      {
-         printf("ROM LZ4 : header OK\n");
-      }
-      else
-      {
-         printf("ROM LZ4 : header KO\n");
-         return false;
-      }
-#endif
-
-#ifdef GW_ROM_ZOPFLI_SUPPORT
-   }
-   else if (memcmp(src, ZLIB_MAGIC,4) == 0)
-   {
-
-      /* DEFLATE decompression */
-      printf("ROM ZLIB detected.\n");
-      memcpy(&rom_size_compressed_src, &src[4], sizeof(rom_size_compressed_src));
-
-      size_t n_decomp_bytes;
-      int flags = 0;
-      flags |= TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF;
-
-      n_decomp_bytes = tinfl_decompress_mem_to_mem(dest, GW_ROM_SIZE_MAX, &src[8], rom_size_compressed_src, flags);
-      assert(n_decomp_bytes != TINFL_DECOMPRESS_MEM_TO_MEM_FAILED);
-      rom_size_src = (uint32_t) n_decomp_bytes;
-
-      if ((memcmp(dest, ROM_CPU_SM510, 3) == 0))
-      {
-         printf("ROM ZLIB : header OK\n");
-      }
-      else
-      {
-         printf("ROM ZLIB : header KO\n");
-         return false;
-      }
-#endif
 
 #ifdef GW_ROM_LZMA_SUPPORT
    }
