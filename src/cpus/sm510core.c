@@ -1,3 +1,6 @@
+#include "build/config.h"
+
+#ifdef ENABLE_EMULATOR_GW
 // license:BSD-3-Clause
 // copyright-holders:hap
 // modded by bzhxx
@@ -294,3 +297,5 @@ void sm510_execute_run()
 		reamining_icount=m_icount;
 	}
 }
+
+#endif

@@ -27,7 +27,7 @@ __license__ = "GPLv3"
 #define GW_SCREEN_HEIGHT 240
 
 /* refresh rate 128Hz */
-#define GW_REFRESH_RATE 128
+#define GW_REFRESH_RATE 60
 
 /* System clock = Audio clock = 32768Hz */
 #define GW_SYS_FREQ 32768U
@@ -72,8 +72,7 @@ void gw_system_set_time(gw_time_t time);
 gw_time_t gw_system_get_time();
 
 /* shared audio buffer between host and emulator */
-extern unsigned char gw_audio_buffer[GW_AUDIO_BUFFER_LENGTH * 2];
-extern bool gw_audio_buffer_copied;
+extern unsigned char gw_audio_buffer[GW_AUDIO_BUFFER_LENGTH];
 
 /* Output of emulated system  */
 void gw_writeR(unsigned char data);
